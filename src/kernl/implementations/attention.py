@@ -263,7 +263,7 @@ def _fwd_kernel(
     k_offs = (
         current_batch_idx * k_batch_stride
         + current_head_idx * k_head_stride
-        + (n_range_offs[:, None] * k_n_stride + dhead_range_offs[None, :] * k_k_stride)
+        + (n_range_offs[None, :] * k_n_stride + dhead_range_offs[:, None] * k_k_stride)
     )
 
     # offsets for the first block on matrix V
@@ -332,7 +332,7 @@ def _fwd_kernel(
         # We do the first multiplication between the block in Q and the current block in K
         # We finish with the scaling (sqrt(BLOCK_DHEAD) in Vaswani et al. but sm_scale here)
         if N_LOAD_MASK_NEEDED:
-            k_ptr_mask = block_n_offs[:, None] < n_size
+            k_ptr_mask = block_n_offs[None, :] < n_size
             k = tl.load(k_ptrs + block_n_start_idx * k_n_stride, mask=k_ptr_mask, other=0.0)
         else:
             k = tl.load(k_ptrs + block_n_start_idx * k_n_stride)
@@ -341,7 +341,7 @@ def _fwd_kernel(
         # required to fix a Triton compiler bug, if not done, there is a precision issue
         if N_LOAD_MASK_NEEDED:
             qk = tl.where(n_range_offs[None, :] < n_size, qk, float("-inf"))
-        qk += tl.dot(q, tl.trans(k))
+        qk += tl.dot(q, k)
         qk *= sm_scale
         if IS_CAUSAL:
             qk += tl.where(m_offs[:, None] >= block_n_offs[None, :], 0, float("-inf"))
